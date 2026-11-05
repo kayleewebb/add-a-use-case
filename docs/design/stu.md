@@ -120,7 +120,7 @@ sequenceDiagram
 
 `canDeactivateStudent` is true when the caller id equals `student.section.course.courseAdmin`, or the caller id is in `student.section.instructors`. It does not use `UserOwnershipAuthorizationManager`: that manager also admits the student herself, and it never looks at `courseAdmin` unless that person is on the course section's instructor list.
 
-`StudentService.deactivateStudent` re-checks `canDeactivateStudent` and throws when it is false, so a missed route rule does not write. The not-found path the route already turned into `403` stays a `403`. An already-deactivated student makes it throw `IllegalArgumentException` with the 3a message; no new exception type.
+`StudentService.deactivateStudent` re-checks `canDeactivateStudent` and throws `AccessDeniedException` when it is false, so a missed route rule does not write and still answers `403`. The not-found path the route already turned into `403` stays a `403`. An already-deactivated student makes it throw `IllegalArgumentException` with the 3a message; no new exception type.
 
 `ActiveAccountFilter` runs on the JWT resource-server chain only. It reads the `userId` claim `JwtProvider` already sets, loads that account, and when `enabled` is false calls `CustomBearerTokenAuthenticationEntryPoint`, the same `401` an expired token gets. The SPA interceptor already clears the session on `401`. Login is unchanged: `MyUserPrincipal.isEnabled()` already fails a new login. The filter also refuses a deactivated instructor, because FR-SEC-active-account names both.
 
