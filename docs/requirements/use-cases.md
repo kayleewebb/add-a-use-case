@@ -1473,12 +1473,28 @@ Details:
 7. Use case ends.
 
 **Extensions:**
+- **3a. The student is already deactivated:**
+  - 3a1. The system informs the course admin or instructor that this student's account is already deactivated and does not change it.
+  - 3a2. Use case ends.
+- **3b. The course admin or instructor is not permitted to deactivate this student:**
+  - 3b1. The system refuses the deactivation and does not change the account (BR-student-lifecycle).
+  - 3b2. Use case ends.
+- **4a. The course admin or instructor declines the deactivation:**
+  - 4a1. The system keeps the student's account active.
+  - 4a2. Use case ends.
+
 **Priority:** Low
 **Frequency of Use:** Rare. Occurs occasionally when a student withdraws from a course section.
-**Business Rules:** BR-student-lifecycle
+**Business Rules:** BR-student-lifecycle, BR-submission-owed
 
 **Associated Information:**
-- Consequence of the deactivation: The student will no longer be able to log in or submit weekly activity reports and peer evaluations, but the student's account and her previously submitted work are kept in the system. Deactivation will NOT remove the student from the system, and the account can be reactivated in the future (UC-STU-reactivate-student: Reactivate a student). This is distinct from deletion (UC-STU-delete-student: Delete a student), which is a physical, unrecoverable delete. The course admin or instructor shall be able to cancel the use case at any time prior to submitting it.
+- Consequence of the deactivation, stated in the warning at step 4:
+  - Her account is deactivated. She can no longer log in, and a token already issued to her is refused on the next request (FR-SEC-active-account).
+  - She stays on her team. Deactivation does not remove her from it (BR-student-lifecycle).
+  - She no longer owes a weekly activity report or a peer evaluation, she is not reminded, and her teammates are not asked to evaluate her (BR-submission-owed). A new peer evaluation of her is rejected (BR-student-lifecycle). Weekly activity reports and peer evaluations already stored are kept.
+  - On a course section's peer evaluation report, she appears for a week only when a peer evaluation of her is stored for that week (UC-EVA-section-evaluation-report: Generate a peer evaluation report of the entire course section).
+  - Deactivation does not delete the account. It can be reactivated (UC-STU-reactivate-student: Reactivate a student). This is distinct from deletion (UC-STU-delete-student: Delete a student).
+  - The course admin or instructor may decline at the warning (extension 4a).
 
 **Related Use Cases:** UC-STU-delete-student: Delete a student; UC-STU-reactivate-student: Reactivate a student
 **Assumptions:**
