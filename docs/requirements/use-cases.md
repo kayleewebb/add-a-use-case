@@ -1473,12 +1473,28 @@ Details:
 7. Use case ends.
 
 **Extensions:**
+- **3a. The student is already deactivated:**
+  - 3a1. The system informs the course admin or instructor that this student's account is already deactivated and does not change it.
+  - 3a2. Use case ends.
+- **3b. The course admin or instructor is not permitted to deactivate this student:**
+  - 3b1. The system refuses the deactivation and does not change the account (BR-student-lifecycle).
+  - 3b2. Use case ends.
+- **4a. The course admin or instructor declines the deactivation:**
+  - 4a1. The system keeps the student's account active.
+  - 4a2. Use case ends.
+
 **Priority:** Low
 **Frequency of Use:** Rare. Occurs occasionally when a student withdraws from a course section.
-**Business Rules:** BR-student-lifecycle
+**Business Rules:** BR-student-lifecycle, BR-submission-owed
 
 **Associated Information:**
-- Consequence of the deactivation: The student will no longer be able to log in or submit weekly activity reports and peer evaluations, but the student's account and her previously submitted work are kept in the system. Deactivation will NOT remove the student from the system, and the account can be reactivated in the future (UC-STU-reactivate-student: Reactivate a student). This is distinct from deletion (UC-STU-delete-student: Delete a student), which is a physical, unrecoverable delete. The course admin or instructor shall be able to cancel the use case at any time prior to submitting it.
+- Consequence of the deactivation, stated in the warning at step 4:
+  - Her account is deactivated. She can no longer log in, and a token already issued to her is refused on the next request (FR-SEC-active-account).
+  - She stays on her team. Deactivation does not remove her from it (BR-student-lifecycle).
+  - She no longer owes a weekly activity report or a peer evaluation, she is not reminded, and her teammates are not asked to evaluate her (BR-submission-owed). A new peer evaluation of her is rejected (BR-student-lifecycle). Weekly activity reports and peer evaluations already stored are kept.
+  - On a course section's peer evaluation report, she appears for a week only when a peer evaluation of her is stored for that week (UC-EVA-section-evaluation-report: Generate a peer evaluation report of the entire course section).
+  - Deactivation does not delete the account. It can be reactivated (UC-STU-reactivate-student: Reactivate a student). This is distinct from deletion (UC-STU-delete-student: Delete a student).
+  - The course admin or instructor may decline at the warning (extension 4a).
 
 **Related Use Cases:** UC-STU-delete-student: Delete a student; UC-STU-reactivate-student: Reactivate a student
 **Assumptions:**
@@ -1517,6 +1533,7 @@ Details:
 
 **Associated Information:**
 - The course admin or instructor shall be able to cancel the use case at any time prior to submitting it.
+- Deactivation does not remove the student from her team (BR-student-lifecycle). Reactivation does not assign her to a team and does not remove her from one; she remains on the team she was on while her account was deactivated.
 
 **Related Use Cases:** UC-STU-delete-student: Delete a student; UC-STU-deactivate-student: Deactivate a student
 **Assumptions:**
@@ -2202,9 +2219,9 @@ Report generating algorithm: N/A
 
 **Main Success Scenario:**
 1. The student indicates to submit a peer evaluation for the previous week.
-2. The system asks the student to provide peer evaluations for every team member.
+2. The system asks the student to provide peer evaluations for every team member whose account is active (BR-submission-owed).
 3. See the "Details" defined in the Associated Information of this use case.
-4. The student evaluates each team member (self included) and confirms that she has finished.
+4. The student evaluates each team member whose account is active (self included) and confirms that she has finished.
 5. The system validates the student's inputs according to the "Details" defined in the Associated Information of this use case.
 6. The system displays the details of the peer evaluation and asks the student to confirm the evaluation and submission.
 7. The system notes that a submitted peer evaluation remains editable while its submission window is open; the student may re-submit it to update it until the window closes (BR-evaluation-editable-until-close, BR-evaluation-submission-window).
@@ -2225,15 +2242,18 @@ Report generating algorithm: N/A
 - **4a. Input validation rule violation:**
   - 4a1. The system alerts the student that an input validation rule is violated and displays the nature and location of the error.
   - 4a2. The student corrects the mistake and returns to step 4 of the normal flow.
+- **4b. The student submits a peer evaluation of a teammate whose account is deactivated:**
+  - 4b1. The system does not accept that peer evaluation and informs the student that a deactivated teammate is not evaluated (BR-student-lifecycle).
+  - 4b2. The student continues with the remaining active teammates at step 4.
 
 **Priority:** High
 **Frequency of Use:** Approximately 35-40 users, 1 usage per week.
-**Business Rules:** BR-team-scoped-access (the student evaluates the members of a team she belongs to, and no other team), BR-team-assignment-required (only a student assigned to a team submits one), BR-active-weeks, BR-evaluation-editable-until-close, BR-evaluation-submission-window, BR-evaluation-private-comment
+**Business Rules:** BR-team-scoped-access (the student evaluates the members of a team she belongs to, and no other team), BR-team-assignment-required (only a student assigned to a team submits one), BR-submission-owed (she evaluates every teammate whose account is active, herself included), BR-student-lifecycle (a deactivated teammate is not evaluated), BR-active-weeks, BR-evaluation-editable-until-close, BR-evaluation-submission-window, BR-evaluation-private-comment
 
 **Associated Information:**
 
 Details:
-- Every team member MUST be evaluated.
+- Every team member whose account is active MUST be evaluated, herself included (BR-submission-owed). A teammate whose account is deactivated is not evaluated (BR-student-lifecycle).
 - Scores MUST be integers.
 
 Example (each team member, self included, is evaluated on every rubric criterion):
@@ -2343,7 +2363,7 @@ Report generating algorithm: For each individual criterion score (e.g., Quality 
 
 **Priority:** High
 **Frequency of Use:** Approximately 2 users, average of 1 usage per week.
-**Business Rules:** BR-section-scoped-access (the instructor may generate the report only for a course section she is assigned to), BR-evaluation-private-comment, BR-submission-owed (who has not turned in the peer evaluation)
+**Business Rules:** BR-section-scoped-access (the instructor may generate the report only for a course section she is assigned to), BR-evaluation-private-comment, BR-submission-owed (who has not turned in the peer evaluation), BR-student-lifecycle (a deactivated student appears only for a week that stores a peer evaluation of her)
 
 **Associated Information:**
 
@@ -2363,6 +2383,8 @@ An example of the generated report:
 | Lily Fisher | … | … | … | … |
 
 The report shall show who did not turn in the peer evaluation for that week, meaning the students who owe it (BR-submission-owed).
+
+Who the report includes for the week: a student who is on a team and whose account is active is included. A deactivated student is included only when a peer evaluation of her is stored for that week (BR-student-lifecycle). Evaluations already stored are kept.
 
 Report generating algorithm: How to compute the peer evaluation grade for a student? Each student receives multiple peer evaluations from her teammates every week. First, obtain the peer evaluations received by a student for that week. For each peer evaluation, compute a total score by adding up the individual criterion scores. Then compute the average of the total scores across the peer evaluations. For example, John Doe receives two peer evaluations from Tim Smith and Lily Fisher, respectively. Tim Smith gives the following scores based on the rubric: 10, 9, 10, 9, 10, 10. So the total score given by Tim is 58. Lily Fisher gives the following scores based on the rubric: 5, 5, 10, 10, 10, 10. So the total score given by Tim is 50. The grade that John Doe receives that week is (58 + 50) / 2 = 54.
 
