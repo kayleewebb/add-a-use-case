@@ -68,6 +68,7 @@ class DeactivateStudentIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.data.enabled").value(false))
                 .andExpect(jsonPath("$.data.teamId").value(teamId));
 
+        this.entityManager.flush();
         this.entityManager.clear();
         assertThat(findJohn().isEnabled()).isFalse();
         assertThat(findJohn().getTeam().getTeamId()).isEqualTo(teamId);
@@ -106,6 +107,7 @@ class DeactivateStudentIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.code").value(StatusCode.INVALID_ARGUMENT))
                 .andExpect(jsonPath("$.message").value("This student's account is already deactivated."));
 
+        this.entityManager.flush();
         this.entityManager.clear();
         assertThat(findJohn().isEnabled()).isFalse();
     }
@@ -122,6 +124,7 @@ class DeactivateStudentIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(jsonPath("$.code").value(StatusCode.FORBIDDEN))
                 .andExpect(jsonPath("$.message").value("No permission."));
 
+        this.entityManager.flush();
         this.entityManager.clear();
         assertThat(findJohn().isEnabled()).isTrue();
     }
@@ -136,6 +139,7 @@ class DeactivateStudentIntegrationTest extends AbstractIntegrationTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value(StatusCode.FORBIDDEN));
 
+        this.entityManager.flush();
         this.entityManager.clear();
         assertThat(findJohn().isEnabled()).isTrue();
     }
