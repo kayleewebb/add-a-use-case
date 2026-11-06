@@ -9,8 +9,7 @@ import jakarta.transaction.Transactional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -27,14 +26,16 @@ public class StudentService {
     private final UserInvitationService userInvitationService;
     private final PasswordEncoder passwordEncoder;
     private final UserUtils userUtils;
+    private final StudentSecurityService studentSecurityService;
 
 
-    public StudentService(StudentRepository studentRepository, SectionRepository sectionRepository, UserInvitationService userInvitationService, PasswordEncoder passwordEncoder, UserUtils userUtils) {
+    public StudentService(StudentRepository studentRepository, SectionRepository sectionRepository, UserInvitationService userInvitationService, PasswordEncoder passwordEncoder, UserUtils userUtils, StudentSecurityService studentSecurityService) {
         this.studentRepository = studentRepository;
         this.sectionRepository = sectionRepository;
         this.userInvitationService = userInvitationService;
         this.passwordEncoder = passwordEncoder;
         this.userUtils = userUtils;
+        this.studentSecurityService = studentSecurityService;
     }
 
     public Page<Student> findByCriteria(Map<String, String> searchCriteria, Pageable pageable) {
@@ -108,21 +109,35 @@ public class StudentService {
         Student oldStudent = this.studentRepository.findById(studentId)
                 .orElseThrow(() -> new ObjectNotFoundException("student", studentId));
 
-        // If the user is not an admin, then the user can only update her username, first rubricName, last rubricName, and email
+        // Name and email only. enabled is not a field of this edit: copying it withdrew a student
+        // with no warning, and let any instructor of the edit route do it. Deactivation is its own
+        // action (UC-STU-deactivate-student). A body that sends enabled: false leaves the account active.
         oldStudent.setUsername(update.getUsername());
         oldStudent.setFirstName(update.getFirstName());
         oldStudent.setLastName(update.getLastName());
         oldStudent.setEmail(update.getEmail());
 
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        // If the user is an admin, then the user can update all the fields
-        if (authentication.getAuthorities().stream().anyMatch(grantedAuthority -> grantedAuthority.getAuthority().equals("ROLE_instructor"))) {
-            oldStudent.setEnabled(update.isEnabled());
-//            oldStudent.setRoles(update.getRoles());
-        }
-
         return this.studentRepository.save(oldStudent);
+    }
+
+    /**
+     * Deactivates the student and leaves her team, weekly activity reports, and peer evaluations where they are.
+     *
+     * <p>The route rule is the first check. This one is the second: a missed rule must not write, and it still
+     * answers 403. An id that names no student is the same 403, because {@code canDeactivateStudent} already
+     * denied it. An account that is already deactivated is a 400 and is not written again.
+     */
+    public Student deactivateStudent(Integer studentId) {
+        if (!this.studentSecurityService.canDeactivateStudent(studentId)) {
+            throw new AccessDeniedException("No permission.");
+        }
+        Student student = this.studentRepository.findById(studentId)
+                .orElseThrow(() -> new AccessDeniedException("No permission."));
+        if (!student.isEnabled()) {
+            throw new IllegalArgumentException("This student's account is already deactivated.");
+        }
+        student.setEnabled(false);
+        return this.studentRepository.save(student);
     }
 
     public void deleteStudent(Integer studentId) {
