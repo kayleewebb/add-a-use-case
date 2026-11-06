@@ -13,14 +13,8 @@
     <el-form-item label="Username:" prop="username">
       <el-input v-model="studentBeingEdited.username"></el-input>
     </el-form-item>
-    <el-form-item label="Status:" prop="enabled">
-      <el-switch
-        v-model="studentBeingEdited.enabled"
-        inline-prompt
-        active-text="Enabled"
-        inactive-text="Disabled"
-        style="--el-switch-on-color: #13ce66; --el-switch-off-color: #ff4949"
-      />
+    <el-form-item label="Status:">
+      <span data-cy="student-status">{{ studentBeingEdited.enabled ? 'Enabled' : 'Disabled' }}</span>
     </el-form-item>
     <el-form-item label="First Name:" prop="firstName">
       <el-input v-model="studentBeingEdited.firstName"></el-input>
@@ -34,7 +28,16 @@
     <el-form-item label="Team:" prop="teamName">
       <el-input v-model="studentBeingEdited.teamName" disabled></el-input>
     </el-form-item>
-    <div style="display: flex; justify-content: end">
+    <div style="display: flex; justify-content: end; gap: 8px">
+      <el-button
+        v-if="studentBeingEdited.enabled"
+        type="danger"
+        plain
+        data-cy="deactivate-student"
+        @click="deactivateExistingStudent()"
+      >
+        Deactivate
+      </el-button>
       <el-button @click="$emit('close-dialog')"> Cancel </el-button>
       <el-button type="primary" @click="updateExistingStudent()"> Confirm </el-button>
     </div>
@@ -42,11 +45,23 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Student } from '@/apis/student/types'
 import type { FormInstance } from 'element-plus'
-import { findStudentById, updateStudent } from '@/apis/student'
+import { deactivateStudent, findStudentById, updateStudent } from '@/apis/student'
 import { ref, onMounted } from 'vue'
+
+// The consequences named in UC-STU-deactivate-student. Static text, so it is safe to render as HTML.
+const DEACTIVATION_WARNING = [
+  '<p>Deactivate this student?</p>',
+  '<ul>',
+  '<li>Her account is deactivated. She can no longer log in, and a token already issued to her is refused on the next request.</li>',
+  '<li>She stays on her team. Deactivation does not remove her from it.</li>',
+  '<li>She no longer owes a weekly activity report or a peer evaluation, she is not reminded, and her teammates are not asked to evaluate her. A new peer evaluation of her is rejected. Weekly activity reports and peer evaluations already stored are kept.</li>',
+  "<li>On a course section's peer evaluation report, she appears for a week only when a peer evaluation of her is stored for that week.</li>",
+  '<li>Deactivation does not delete the account. It can be reactivated. This is distinct from deletion.</li>',
+  '</ul>'
+].join('')
 
 const { studentId } = defineProps(['studentId'])
 const emit = defineEmits(['close-dialog'])
@@ -74,7 +89,6 @@ const rules = {
       trigger: 'blur'
     }
   ],
-  enabled: [{ required: true, message: 'Please select the status of the user.', trigger: 'blur' }],
   firstName: [
     { required: true, message: 'Please provide the first name of the user.', trigger: 'blur' }
   ],
@@ -115,12 +129,30 @@ async function updateExistingStudent() {
     lastName: studentBeingEdited.value.lastName,
     email: studentBeingEdited.value.email
   }
-  console.log(updatedStudent)
-  // Call the API to update the user
   await updateStudent(updatedStudent)
 
   ElMessage.success('Student updated successfully')
   emit('close-dialog')
+}
+
+async function deactivateExistingStudent() {
+  try {
+    await ElMessageBox.confirm(DEACTIVATION_WARNING, 'Deactivate this student?', {
+      confirmButtonText: 'Deactivate',
+      cancelButtonText: 'Cancel',
+      confirmButtonClass: 'cy-deactivate-confirm',
+      cancelButtonClass: 'cy-deactivate-cancel',
+      type: 'warning',
+      dangerouslyUseHTMLString: true
+    })
+  } catch {
+    // Declining the warning leaves the account active and sends no request.
+    return
+  }
+
+  const result = await deactivateStudent(studentBeingEdited.value.id as number)
+  studentBeingEdited.value.enabled = result.data.enabled
+  ElMessage.success(result.message)
 }
 </script>
 

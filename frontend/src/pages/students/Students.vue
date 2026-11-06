@@ -8,7 +8,7 @@
     <!-- Search Form -->
     <el-form inline>
       <el-form-item label="Student First Name:">
-        <el-input v-model="searchCriteria.firstName" @input="loadStudents" />
+        <el-input v-model="searchCriteria.firstName" data-cy="student-search-first-name" @input="loadStudents" />
       </el-form-item>
       <el-form-item label="Student Last Name:">
         <el-input v-model="searchCriteria.lastName" @input="loadStudents" />
@@ -46,6 +46,7 @@
             circle
             plain
             type="primary"
+            data-cy="edit-student"
             @click.stop="showEditStudentDialog(row)"
           ></el-button>
         </template>
