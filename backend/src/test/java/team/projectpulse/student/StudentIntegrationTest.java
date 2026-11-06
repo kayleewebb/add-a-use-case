@@ -253,6 +253,25 @@ class StudentIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void testInstructorBillUpdateIgnoresEnabled() throws Exception {
+        Map<String, Object> studentDto = new HashMap<>();
+        studentDto.put("username", "j.smith@abc.edu");
+        studentDto.put("firstName", "John (updated)");
+        studentDto.put("lastName", "Smith");
+        studentDto.put("email", "j.smith@abc.edu");
+        studentDto.put("enabled", false);
+
+        String json = this.jsonMapper.writeValueAsString(studentDto);
+
+        this.mockMvc.perform(put(this.baseUrl + "/students/4").contentType(MediaType.APPLICATION_JSON).content(json).accept(MediaType.APPLICATION_JSON).header(HttpHeaders.AUTHORIZATION, this.instructorBillToken))
+                .andExpect(jsonPath("$.flag").value(true))
+                .andExpect(jsonPath("$.code").value(StatusCode.SUCCESS))
+                .andExpect(jsonPath("$.message").value("Update student successfully"))
+                .andExpect(jsonPath("$.data.firstName").value("John (updated)"))
+                .andExpect(jsonPath("$.data.enabled").value(true));
+    }
+
+    @Test
     void testStudentJohnUpdatesAnotherStudentsInfo() throws Exception {
         Map<String, String> studentDto = new HashMap<>();
         studentDto.put("username", "eric");

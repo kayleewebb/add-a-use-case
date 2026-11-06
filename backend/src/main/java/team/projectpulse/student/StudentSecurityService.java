@@ -6,8 +6,9 @@ import org.springframework.stereotype.Service;
 
 /**
  * Answers the questions a route asks about one named student: is that student the caller herself
- * ({@code isStudentSelf}), and is the caller an instructor of that student's course section
- * ({@code isCurrentUserInstructorOfStudentSection}).
+ * ({@code isStudentSelf}), is the caller an instructor of that student's course section
+ * ({@code isCurrentUserInstructorOfStudentSection}), and may the caller deactivate her
+ * ({@code canDeactivateStudent}).
  *
  * <p>Every check fails closed: an id that names no row, or a link not yet established, is denied rather than
  * throwing. These methods run inside an {@code AuthorizationManager}, upstream of the {@code DispatcherServlet},
@@ -45,6 +46,35 @@ public class StudentSecurityService {
         }
         return student.getSection().getInstructors().stream()
                 .anyMatch(instructor -> instructor.getId().equals(instructorIdFromJwt));
+    }
+
+    /**
+     * The course admin of the student's course, or an instructor of her course section, may deactivate her
+     * (BR-student-lifecycle). The student herself may not, and neither may an instructor of some other course
+     * section. An unknown id is denied, same as every other check here, so the route answers 403 rather than
+     * revealing which ids exist.
+     *
+     * <p>This does not use the ownership check that guards the edit route. That check also admits the student
+     * herself, and it never looks at the course admin unless that person is already on the course section's
+     * instructor list.
+     */
+    public boolean canDeactivateStudent(Integer studentId) {
+        if (studentId == null) {
+            return false;
+        }
+        Integer callerId = this.userUtils.getUserId();
+        if (callerId == null) {
+            return false;
+        }
+        Student student = this.studentRepository.findById(studentId).orElse(null);
+        if (student == null) {
+            return false;
+        }
+        if (callerId.equals(student.getSection().getCourse().getCourseAdmin().getId())) {
+            return true;
+        }
+        return student.getSection().getInstructors().stream()
+                .anyMatch(instructor -> callerId.equals(instructor.getId()));
     }
 
 }

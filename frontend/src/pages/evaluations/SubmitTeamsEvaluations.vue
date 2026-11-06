@@ -22,6 +22,7 @@
     <!-- Evaluation Table, adding height can fix the table header -->
     <el-table
       :data="peerEvalutions"
+      data-cy="peer-evaluation-form"
       style="width: 100%"
       stripe
       border
@@ -109,6 +110,7 @@
         @click="submitPeerEvaluations"
         v-if="isNewSubmission"
         :loading="isLoading"
+        data-cy="submit-evaluations"
         >Submit</el-button
       >
       <el-button type="warning" @click="updatePeerEvaluations" :loading="isLoading" v-else
@@ -135,13 +137,7 @@ import {
   sendPeerEvaluationSubmissionConfirmationEmail
 } from '@/apis/evaluation'
 import { ElMessage } from 'element-plus'
-import type {
-  FetchPeerEvaluationsResponse,
-  PeerEvaluation,
-  Rating,
-  SubmitPeerEvaluationResponse,
-  UpdatePeerEvaluationResponse
-} from '@/apis/evaluation/types'
+import type { FetchPeerEvaluationsResponse, PeerEvaluation, Rating } from '@/apis/evaluation/types'
 
 const previousWeek = ref<string>('')
 const previousWeekRange = ref<string>('')
@@ -182,7 +178,8 @@ onMounted(async () => {
 async function loadStudents() {
   // On the back end, the page number starts from 0, so subtract 1 here
   const result: FindStudentByTeamIdResponse = await findStudentsByTeamId(teamId.value)
-  students.value = result.data
+  // A deactivated teammate is not evaluated (BR-student-lifecycle).
+  students.value = result.data.filter((student) => student.enabled)
 }
 
 // Load criteria information
@@ -227,36 +224,56 @@ async function prepareStartingPeerEvaluations() {
 
 // Submit peer evaluations
 async function submitPeerEvaluations() {
-  if (peerEvalutions.value) {
-    const submitPromises = peerEvalutions.value.map(async (evaluation) => {
-      const result: SubmitPeerEvaluationResponse = await submitEvaluation(evaluation)
-      return result.data
-    })
-    isLoading.value = true
-    peerEvalutions.value = await Promise.all(submitPromises) // Wait for all promises to resolve
-    isNewSubmission = false // Change to update mode
+  const rows = peerEvalutions.value
+  if (!rows) return
+  isLoading.value = true
+  // One refusal must not discard the evaluations that did save (UC-EVA-submit-evaluation extension 4b2).
+  // A later click sends only the rows that still have no id.
+  const pending = rows
+    .map((evaluation, index) => ({ evaluation, index }))
+    .filter((row) => row.evaluation.evaluationId == null)
+  const results = await Promise.allSettled(pending.map((row) => submitEvaluation(row.evaluation)))
+  results.forEach((result, resultIndex) => {
+    if (result.status !== 'fulfilled') return
+    const pendingRow = pending[resultIndex]
+    if (!pendingRow) return
+    const original = pendingRow.evaluation
+    rows[pendingRow.index] = {
+      ...original,
+      ...result.value.data,
+      evaluateeName: result.value.data.evaluateeName ?? original.evaluateeName
+    }
+  })
+  const allStored = rows.every((evaluation) => evaluation.evaluationId != null)
+  if (allStored) {
+    isNewSubmission = false
     ElMessage.success('Peer evaluations submitted successfully')
-    isLoading.value = false
-
-    // Send an submission confirmation email to the submitter
     await sendPeerEvaluationSubmissionConfirmationEmail(previousWeekRange.value)
     ElMessage.success('A confirmation email has been sent to you.')
   }
+  isLoading.value = false
 }
 
 // Update peer evaluations
 async function updatePeerEvaluations() {
-  if (peerEvalutions.value) {
-    const submitPromises = peerEvalutions.value.map(async (evaluation) => {
-      const result: UpdatePeerEvaluationResponse = await updateEvaluation(evaluation)
-      return result.data
-    })
-
-    isLoading.value = true
-    peerEvalutions.value = await Promise.all(submitPromises) // Wait for all promises to resolve
+  const rows = peerEvalutions.value
+  if (!rows) return
+  isLoading.value = true
+  const results = await Promise.allSettled(rows.map((evaluation) => updateEvaluation(evaluation)))
+  results.forEach((result, index) => {
+    if (result.status !== 'fulfilled') return
+    const original = rows[index]
+    if (!original) return
+    rows[index] = {
+      ...original,
+      ...result.value.data,
+      evaluateeName: result.value.data.evaluateeName ?? original.evaluateeName
+    }
+  })
+  if (results.every((result) => result.status === 'fulfilled')) {
     ElMessage.success('Peer evaluations updated successfully')
-    isLoading.value = false
   }
+  isLoading.value = false
 }
 </script>
 

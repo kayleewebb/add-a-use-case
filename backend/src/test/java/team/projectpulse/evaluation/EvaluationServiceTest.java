@@ -30,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -316,6 +317,35 @@ class EvaluationServiceTest {
     }
 
     @Test
+    void testAddPeerEvaluationOfADeactivatedTeammateIsRejectedAndAnActiveTeammateStillSaves() {
+        // Given
+        LocalDate fixedDate = LocalDate.of(2023, 8, 13); // Sunday of 2023-W32, so the previous week is 2023-W31
+        Clock fixedClock = Clock.fixed(fixedDate.atStartOfDay(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
+        given(this.clock.instant()).willReturn(fixedClock.instant());
+        given(this.clock.getZone()).willReturn(fixedClock.getZone());
+
+        this.woody.setEnabled(false);
+        PeerEvaluation ofWoody = new PeerEvaluation("2023-W31", this.amanda, this.woody, List.of(), "public comment", "private comment");
+
+        // When
+        Throwable throwable = catchThrowable(() -> this.evaluationService.addPeerEvaluation(ofWoody));
+
+        // Then
+        assertThat(throwable)
+                .isInstanceOf(PeerEvaluationIllegalArgumentException.class)
+                .hasMessage("A deactivated teammate is not evaluated.");
+        verify(this.evaluationRepository, never()).save(any());
+
+        PeerEvaluation ofAmanda = new PeerEvaluation("2023-W31", this.amanda, this.amanda, List.of(), "public comment", "private comment");
+        given(this.evaluationRepository.save(ofAmanda)).willReturn(ofAmanda);
+
+        PeerEvaluation saved = this.evaluationService.addPeerEvaluation(ofAmanda);
+
+        assertThat(saved).isEqualTo(ofAmanda);
+        verify(this.evaluationRepository, times(1)).save(ofAmanda);
+    }
+
+    @Test
     void testAddPeerEvaluationNotInActiveWeeks() {
         // Given
         // No clock is needed here: an inactive week is refused before the previous-week check reads the clock
@@ -590,6 +620,30 @@ class EvaluationServiceTest {
         assertThat(report.getPeerEvaluationAverages().get(1).getAverageTotalScore()).isCloseTo(50.0, within(0.01));
         assertThat(report.getPeerEvaluationAverages().get(2).getAverageTotalScore()).isCloseTo(51.0, within(0.01));
         assertThat(report.getPeerEvaluationAverages().get(3).getAverageTotalScore()).isCloseTo(52.0, within(0.01));
+    }
+
+    @Test
+    void testGenerateWeeklyPeerEvaluationReportIncludesADeactivatedStudentOnlyWhenTheWeekStoresAnEvaluation() {
+        // Given
+        Student jerry = this.students.stream().filter(student -> student.getFirstName().equals("Jerry")).findFirst().orElseThrow();
+        jerry.setEnabled(false);
+        given(this.sectionRepository.findById(anyInt())).willReturn(Optional.of(new Section("2023-2024", LocalDate.of(2023, 8, 14), LocalDate.of(2024, 4, 29), true, DayOfWeek.MONDAY, LocalTime.of(23, 59), DayOfWeek.TUESDAY, LocalTime.of(23, 59))));
+        given(this.studentRepository.findBySectionSectionId(anyInt())).willReturn(this.students);
+        given(this.evaluationRepository.findByWeekAndEvaluateeId("2023-W31", jerry.getId())).willReturn(this.ericsW31Evaluations);
+
+        // When
+        WeeklyPeerEvaluationReport weekWithAnEvaluation = this.evaluationService.generateWeeklyPeerEvaluationReportForSection(2, "2023-W31");
+        WeeklyPeerEvaluationReport laterWeek = this.evaluationService.generateWeeklyPeerEvaluationReportForSection(2, "2023-W32");
+
+        // Then. Jerry is deactivated. Week 31 stores an evaluation of him; week 32 does not.
+        // Amanda is active and has no evaluations in week 32, and she is still listed.
+        assertThat(weekWithAnEvaluation.getPeerEvaluationAverages())
+                .extracting(PeerEvaluationAverage::getStudentId)
+                .contains(jerry.getId(), this.amanda.getId());
+        assertThat(laterWeek.getPeerEvaluationAverages())
+                .extracting(PeerEvaluationAverage::getStudentId)
+                .contains(this.amanda.getId())
+                .doesNotContain(jerry.getId());
     }
 
     @Test

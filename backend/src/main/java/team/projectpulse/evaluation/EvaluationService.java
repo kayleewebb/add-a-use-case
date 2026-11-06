@@ -67,6 +67,13 @@ public class EvaluationService {
             throw new PeerEvaluationIllegalArgumentException("The evaluator and evaluatee must be on the same team.");
         }
 
+        // A deactivated teammate is not evaluated (BR-student-lifecycle). An evaluation stored while her
+        // account was active can still be corrected until its window closes: updatePeerEvaluation does not
+        // repeat this check.
+        if (!newPeerEvaluation.getEvaluatee().isEnabled()) {
+            throw new PeerEvaluationIllegalArgumentException("A deactivated teammate is not evaluated.");
+        }
+
         // Make sure this is not a duplicate evaluation
         if (this.evaluationRepository.findByWeekAndEvaluatorIdAndEvaluateeId(newPeerEvaluation.getWeek(), newPeerEvaluation.getEvaluator().getId(), newPeerEvaluation.getEvaluatee().getId()).isPresent()) {
             throw new PeerEvaluationIllegalArgumentException("You have already submitted an evaluation for " + newPeerEvaluation.getEvaluatee().getFirstName() + " in this week.");
@@ -220,8 +227,12 @@ public class EvaluationService {
 
         report.setSectionName(this.sectionRepository.findById(sectionId).orElseThrow(() -> new ObjectNotFoundException("section", sectionId)).getSectionName());
 
-        // Get all students in the section
-        List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream().filter(student -> student.getTeam() != null).collect(Collectors.toList());
+        // An active student on a team is listed even when the week stores no evaluation of her.
+        // A deactivated student stays on her team, and is listed only for a week that already stores
+        // a peer evaluation of her (BR-student-lifecycle).
+        List<Student> students = this.studentRepository.findBySectionSectionId(sectionId).stream()
+                .filter(student -> includedInSectionReport(student, week))
+                .collect(Collectors.toList());
 
         // For each student, compute her average total score, collect all public comments and private comments, and compute rating averages for each criterion.
         students.forEach(student -> {
@@ -235,6 +246,16 @@ public class EvaluationService {
 
         report.setWeek(week);
         return report;
+    }
+
+    private boolean includedInSectionReport(Student student, String week) {
+        if (student.getTeam() == null) {
+            return false;
+        }
+        if (student.isEnabled()) {
+            return true;
+        }
+        return !this.evaluationRepository.findByWeekAndEvaluateeId(week, student.getId()).isEmpty();
     }
 
     public PeerEvaluationAverage generateWeeklyPeerEvaluationSummaryForStudent(Integer studentId, String week) {
